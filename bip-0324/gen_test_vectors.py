@@ -32,7 +32,7 @@ def xswiftec_flagged(u, t, simplified=False):
     if t == 0:
         flags.append("t%p=0")
         t = FE(1)
-    if u**3 + t**2 + 7 == 0:
+    if u**3 + t**2 == -7:
         flags.append("(u'^3+t'^2+7)%p=0")
         t = 2 * t
     X = (u**3 + 7 - t**2) / (2 * t)
@@ -95,11 +95,11 @@ def ellswift_create_deterministic(seed, features):
         have_x1 = "valid_x(x1)" in flags
         have_x2 = "valid_x(x2)" in flags
         have_x3 = "valid_x(x3)" in flags
-        if (features & 4) == 0 and not (have_x1 and not have_x2 and not have_x3):
+        if (features & 4) == 0 and (not have_x1 or have_x2 or have_x3):
             continue
-        if (features & 4) == 1 and not (not have_x1 and have_x2 and not have_x3):
+        if (features & 4) == 1 and (have_x1 or not have_x2 or have_x3):
             continue
-        if (features & 4) == 2 and not (not have_x1 and not have_x2 and have_x3):
+        if (features & 4) == 2 and (have_x1 or have_x2 or not have_x3):
             continue
         if (features & 4) == 3 and not (have_x1 and have_x2 and have_x3):
             continue
@@ -131,9 +131,8 @@ def fn_of(p_in, fn):
     """Function to use in tuple_expand, to pick one variable in function of another."""
     def inner(vs, _seed, _i, p):
         assert p != p_in
-        if isinstance(vs[p_in], int):
-            return fn(vs[p_in])
-        return None
+        return fn(vs[p_in]) if isinstance(vs[p_in], int) else None
+
     return inner
 
 def tuple_expand(out, tuplespec, prio, seed=None, cnt=1):
@@ -230,8 +229,6 @@ def xswiftec_inv_flagged(x, u, case):
             flags.append("bad[valid_x(-x-u)]")
             return None, flags
         v = x if case & 1 == 0 else -x - u
-        if v == 0:
-            flags.append("info[v=0]")
         s = -(u**3 + 7) / (u**2 + u*v + v**2)
         assert s != 0 # would imply X=0 on curve
     else:
@@ -252,8 +249,8 @@ def xswiftec_inv_flagged(x, u, case):
                 return None, flags
             r = -r
         v = (-u + r / s) / 2
-        if v == 0:
-            flags.append("info[v=0]")
+    if v == 0:
+        flags.append("info[v=0]")
     w = s.sqrt()
     assert w != 0
     if w is None:

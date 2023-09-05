@@ -73,9 +73,7 @@ def lift_x(x: int) -> Optional[Point]:
         return None
     y_sq = (pow(x, 3, p) + 7) % p
     y = pow(y_sq, (p + 1) // 4, p)
-    if pow(y, 2, p) != y_sq:
-        return None
-    return (x, y if y & 1 == 0 else p-y)
+    return None if pow(y, 2, p) != y_sq else (x, y if y & 1 == 0 else p-y)
 
 def int_from_bytes(b: bytes) -> int:
     return int.from_bytes(b, byteorder="big")
@@ -124,12 +122,17 @@ def schnorr_verify(msg: bytes, pubkey: bytes, sig: bytes) -> bool:
     if len(sig) != 64:
         raise ValueError('The signature must be a 64-byte array.')
     P = lift_x(int_from_bytes(pubkey))
-    r = int_from_bytes(sig[0:32])
+    r = int_from_bytes(sig[:32])
     s = int_from_bytes(sig[32:64])
     if (P is None) or (r >= p) or (s >= n):
         debug_print_vars()
         return False
-    e = int_from_bytes(tagged_hash("BIP0340/challenge", sig[0:32] + pubkey + msg)) % n
+    e = (
+        int_from_bytes(
+            tagged_hash("BIP0340/challenge", sig[:32] + pubkey + msg)
+        )
+        % n
+    )
     R = point_add(point_mul(G, s), point_mul(P, n - e))
     if (R is None) or (not has_even_y(R)) or (x(R) != r):
         debug_print_vars()
@@ -155,7 +158,7 @@ def test_vectors() -> bool:
             msg = bytes.fromhex(msg_hex)
             sig = bytes.fromhex(sig_hex)
             result = result_str == 'TRUE'
-            print('\nTest vector', ('#' + index).rjust(3, ' ') + ':')
+            print('\nTest vector', f'#{index}'.rjust(3, ' ') + ':')
             if seckey_hex != '':
                 seckey = bytes.fromhex(seckey_hex)
                 pubkey_actual = pubkey_gen(seckey)
@@ -200,12 +203,10 @@ import inspect
 
 def pretty(v: Any) -> Any:
     if isinstance(v, bytes):
-        return '0x' + v.hex()
+        return f'0x{v.hex()}'
     if isinstance(v, int):
         return pretty(bytes_from_int(v))
-    if isinstance(v, tuple):
-        return tuple(map(pretty, v))
-    return v
+    return tuple(map(pretty, v)) if isinstance(v, tuple) else v
 
 def debug_print_vars() -> None:
     if DEBUG:
