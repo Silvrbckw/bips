@@ -67,8 +67,7 @@ with open(FILENAME_XSWIFTEC_INV_TEST, newline='', encoding='utf-8') as csvfile:
         udat = bytes.fromhex(row['u'])
         xdat = bytes.fromhex(row['x'])
         for case in range(8):
-            tdat = bytes.fromhex(row[f"case{case}_t"])
-            if tdat:
+            if tdat := bytes.fromhex(row[f"case{case}_t"]):
                 assert ellswift_decode_sage(udat + tdat) == xdat
 
 with open(FILENAME_ELLSWIFT_DECODE_TEST, newline='', encoding='utf-8') as csvfile:

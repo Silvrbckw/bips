@@ -10,9 +10,7 @@ FILENAME_ELLSWIFT_DECODE_TEST = os.path.join(sys.path[0], 'ellswift_decode_test_
 
 def format_int(v):
     """Format 0 as "0", but other integers as 0x%08x."""
-    if v == 0:
-        return "0"
-    return f"0x{v:08x}"
+    return "0" if v == 0 else f"0x{v:08x}"
 
 def format_fe(fe):
     """Format a field element constant as SECP256K1_FE_CONST code."""
@@ -29,9 +27,12 @@ def output_xswiftec_inv_cases():
             u = int.from_bytes(bytes.fromhex(row['u']), 'big')
             x = int.from_bytes(bytes.fromhex(row['x']), 'big')
             pat = sum(1<<c for c in range(8) if row[f"case{c}_t"])
-            tstrs = []
-            for c in range(8):
-                tstrs.append(format_fe(int.from_bytes(bytes.fromhex(row[f"case{c}_t"]), 'big')))
+            tstrs = [
+                format_fe(
+                    int.from_bytes(bytes.fromhex(row[f"case{c}_t"]), 'big')
+                )
+                for c in range(8)
+            ]
             print(f"    {{0x{pat:02x}, {format_fe(u)}, {format_fe(x)}, {{{', '.join(tstrs)}}}}},")
     print()
 

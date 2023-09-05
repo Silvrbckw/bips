@@ -71,9 +71,7 @@ def lift_x(b: bytes) -> Optional[Point]:
         return None
     y_sq = (pow(x, 3, p) + 7) % p
     y = pow(y_sq, (p + 1) // 4, p)
-    if pow(y, 2, p) != y_sq:
-        return None
-    return (x, y if y & 1 == 0 else p-y)
+    return None if pow(y, 2, p) != y_sq else (x, y if y & 1 == 0 else p-y)
 
 def int_from_bytes(b: bytes) -> int:
     return int.from_bytes(b, byteorder="big")
@@ -90,15 +88,18 @@ def schnorr_verify(msg: bytes, pubkey: bytes, sig: bytes) -> bool:
     if len(sig) != 64:
         raise ValueError('The signature must be a 64-byte array.')
     P = lift_x(pubkey)
-    r = int_from_bytes(sig[0:32])
+    r = int_from_bytes(sig[:32])
     s = int_from_bytes(sig[32:64])
     if (P is None) or (r >= p) or (s >= n):
         return False
-    e = int_from_bytes(tagged_hash("BIP0340/challenge", sig[0:32] + pubkey + msg)) % n
+    e = (
+        int_from_bytes(
+            tagged_hash("BIP0340/challenge", sig[:32] + pubkey + msg)
+        )
+        % n
+    )
     R = point_add(point_mul(G, s), point_mul(P, n - e))
-    if (R is None) or (not has_even_y(R)) or (x(R) != r):
-        return False
-    return True
+    return bool(R is not None and has_even_y(R) and x(R) == r)
 
 #
 # End of helper functions copied from BIP-340 reference implementation.
@@ -144,9 +145,7 @@ def cbytes_ext(P: Optional[Point]) -> bytes:
     return cbytes(P)
 
 def point_negate(P: Optional[Point]) -> Optional[Point]:
-    if P is None:
-        return P
-    return (x(P), p - y(P))
+    return P if P is None else (x(P), p - y(P))
 
 def cpoint(x: bytes) -> Point:
     if len(x) != 33:
@@ -164,10 +163,7 @@ def cpoint(x: bytes) -> Point:
         raise ValueError('x is not a valid compressed point.')
 
 def cpoint_ext(x: bytes) -> Optional[Point]:
-    if x == (0).to_bytes(33, 'big'):
-        return None
-    else:
-        return cpoint(x)
+    return None if x == (0).to_bytes(33, 'big') else cpoint(x)
 
 # Return the plain public key corresponding to a given secret key
 def individual_pk(seckey: bytes) -> PlainPk:
@@ -231,10 +227,7 @@ def apply_tweak(keyagg_ctx: KeyAggContext, tweak: bytes, is_xonly: bool) -> KeyA
     if len(tweak) != 32:
         raise ValueError('The tweak must be a 32-byte array.')
     Q, gacc, tacc = keyagg_ctx
-    if is_xonly and not has_even_y(Q):
-        g = n - 1
-    else:
-        g = 1
+    g = n - 1 if is_xonly and not has_even_y(Q) else 1
     t = int_from_bytes(tweak)
     if t >= n:
         raise ValueError('The tweak must be less than n.')
@@ -262,10 +255,7 @@ def nonce_hash(rand: bytes, pk: PlainPk, aggpk: XonlyPk, i: int, msg_prefixed: b
     return int_from_bytes(tagged_hash('MuSig/nonce', buf))
 
 def nonce_gen_internal(rand_: bytes, sk: Optional[bytes], pk: PlainPk, aggpk: Optional[XonlyPk], msg: Optional[bytes], extra_in: Optional[bytes]) -> Tuple[bytearray, bytes]:
-    if sk is not None:
-        rand = bytes_xor(sk, tagged_hash('MuSig/aux', rand_))
-    else:
-        rand = rand_
+    rand = rand_ if sk is None else bytes_xor(sk, tagged_hash('MuSig/aux', rand_))
     if aggpk is None:
         aggpk = XonlyPk(b'')
     if msg is None:
@@ -331,7 +321,7 @@ def get_session_values(session_ctx: SessionContext) -> Tuple[Point, int, int, in
     Q, gacc, tacc = key_agg_and_tweak(pubkeys, tweaks, is_xonly)
     b = int_from_bytes(tagged_hash('MuSig/noncecoef', aggnonce + xbytes(Q) + msg)) % n
     try:
-        R_1 = cpoint_ext(aggnonce[0:33])
+        R_1 = cpoint_ext(aggnonce[:33])
         R_2 = cpoint_ext(aggnonce[33:66])
     except ValueError:
         # Nonce aggregator sent invalid nonces
@@ -351,7 +341,7 @@ def get_session_key_agg_coeff(session_ctx: SessionContext, P: Point) -> int:
 
 def sign(secnonce: bytearray, sk: bytes, session_ctx: SessionContext) -> bytes:
     (Q, gacc, _, b, R, e) = get_session_values(session_ctx)
-    k_1_ = int_from_bytes(secnonce[0:32])
+    k_1_ = int_from_bytes(secnonce[:32])
     k_2_ = int_from_bytes(secnonce[32:64])
     # Overwrite the secnonce argument with zeros such that subsequent calls of
     # sign with the same secnonce raise a ValueError.
@@ -368,7 +358,7 @@ def sign(secnonce: bytearray, sk: bytes, session_ctx: SessionContext) -> bytes:
     P = point_mul(G, d_)
     assert P is not None
     pk = cbytes(P)
-    if not pk == secnonce[64:97]:
+    if pk != secnonce[64:97]:
         raise ValueError('Public key does not match nonce_gen argument')
     a = get_session_key_agg_coeff(session_ctx, P)
     g = 1 if has_even_y(Q) else n - 1
@@ -395,10 +385,7 @@ def det_nonce_hash(sk_: bytes, aggothernonce: bytes, aggpk: bytes, msg: bytes, i
     return int_from_bytes(tagged_hash('MuSig/deterministic/nonce', buf))
 
 def deterministic_sign(sk: bytes, aggothernonce: bytes, pubkeys: List[PlainPk], tweaks: List[bytes], is_xonly: List[bool], msg: bytes, rand: Optional[bytes]) -> Tuple[bytes, bytes]:
-    if rand is not None:
-        sk_ = bytes_xor(sk, tagged_hash('MuSig/aux', rand))
-    else:
-        sk_ = sk
+    sk_ = bytes_xor(sk, tagged_hash('MuSig/aux', rand)) if rand is not None else sk
     aggpk = get_xonly_pk(key_agg_and_tweak(pubkeys, tweaks, is_xonly))
 
     k_1 = det_nonce_hash(sk_, aggothernonce, aggpk, msg, 0) % n
@@ -435,7 +422,7 @@ def partial_sig_verify_internal(psig: bytes, pubnonce: bytes, pk: bytes, session
     s = int_from_bytes(psig)
     if s >= n:
         return False
-    R_s1 = cpoint(pubnonce[0:33])
+    R_s1 = cpoint(pubnonce[:33])
     R_s2 = cpoint(pubnonce[33:66])
     Re_s_ = point_add(R_s1, point_mul(R_s2, b))
     Re_s = Re_s_ if has_even_y(R) else point_negate(Re_s_)
@@ -523,7 +510,7 @@ def test_key_agg_vectors() -> None:
 
         assert get_xonly_pk(key_agg(pubkeys)) == expected
 
-    for i, test_case in enumerate(error_test_cases):
+    for test_case in error_test_cases:
         exception, except_fn = get_error_details(test_case)
 
         pubkeys = [X[i] for i in test_case["key_indices"]]
@@ -541,10 +528,7 @@ def test_nonce_gen_vectors() -> None:
             return bytes.fromhex(test_case[key])
 
         def get_value_maybe(key) -> Optional[bytes]:
-            if test_case[key] is not None:
-                return get_value(key)
-            else:
-                return None
+            return get_value(key) if test_case[key] is not None else None
 
         rand_ = get_value("rand_")
         sk = get_value_maybe("sk")
@@ -572,7 +556,7 @@ def test_nonce_agg_vectors() -> None:
         expected = bytes.fromhex(test_case["expected"])
         assert nonce_agg(pubnonces) == expected
 
-    for i, test_case in enumerate(error_test_cases):
+    for test_case in error_test_cases:
         exception, except_fn = get_error_details(test_case)
         pubnonces = [pnonce[i] for i in test_case["pnonce_indices"]]
         assert_raises(exception, lambda: nonce_agg(pubnonces), except_fn)
@@ -589,7 +573,7 @@ def test_sign_verify_vectors() -> None:
     secnonces = fromhex_all(test_data["secnonces"])
     pnonce = fromhex_all(test_data["pnonces"])
     # The public nonce corresponding to secnonces[0] is at index 0
-    k_1 = int_from_bytes(secnonces[0][0:32])
+    k_1 = int_from_bytes(secnonces[0][:32])
     k_2 = int_from_bytes(secnonces[0][32:64])
     R_s1 = point_mul(G, k_1)
     R_s2 = point_mul(G, k_2)
@@ -626,7 +610,7 @@ def test_sign_verify_vectors() -> None:
         assert sign(secnonce_tmp, sk, session_ctx) == expected
         assert partial_sig_verify(expected, pubnonces, pubkeys, [], [], msg, signer_index)
 
-    for i, test_case in enumerate(sign_error_test_cases):
+    for test_case in sign_error_test_cases:
         exception, except_fn = get_error_details(test_case)
 
         pubkeys = [X[i] for i in test_case["key_indices"]]
@@ -646,7 +630,7 @@ def test_sign_verify_vectors() -> None:
 
         assert not partial_sig_verify(sig, pubnonces, pubkeys, [], [], msg, signer_index)
 
-    for i, test_case in enumerate(verify_error_test_cases):
+    for test_case in verify_error_test_cases:
         exception, except_fn = get_error_details(test_case)
 
         sig = bytes.fromhex(test_case["sig"])
@@ -669,7 +653,7 @@ def test_tweak_vectors() -> None:
     secnonce = bytearray(bytes.fromhex(test_data["secnonce"]))
     pnonce = fromhex_all(test_data["pnonces"])
     # The public nonce corresponding to secnonce is at index 0
-    k_1 = int_from_bytes(secnonce[0:32])
+    k_1 = int_from_bytes(secnonce[:32])
     k_2 = int_from_bytes(secnonce[32:64])
     R_s1 = point_mul(G, k_1)
     R_s2 = point_mul(G, k_2)
@@ -702,7 +686,7 @@ def test_tweak_vectors() -> None:
         assert sign(secnonce_tmp, sk, session_ctx) == expected
         assert partial_sig_verify(expected, pubnonces, pubkeys, tweaks, is_xonly, msg, signer_index)
 
-    for i, test_case in enumerate(error_test_cases):
+    for test_case in error_test_cases:
         exception, except_fn = get_error_details(test_case)
 
         pubkeys = [X[i] for i in test_case["key_indices"]]
@@ -747,7 +731,7 @@ def test_det_sign_vectors() -> None:
         session_ctx = SessionContext(aggnonce, pubkeys, tweaks, is_xonly, msg)
         assert partial_sig_verify_internal(psig, pubnonce, pubkeys[signer_index], session_ctx)
 
-    for i, test_case in enumerate(error_test_cases):
+    for test_case in error_test_cases:
         exception, except_fn = get_error_details(test_case)
 
         pubkeys = [X[i] for i in test_case["key_indices"]]
@@ -796,7 +780,7 @@ def test_sig_agg_vectors() -> None:
         aggpk = get_xonly_pk(key_agg_and_tweak(pubkeys, tweaks, is_xonly))
         assert schnorr_verify(msg, aggpk, sig)
 
-    for i, test_case in enumerate(error_test_cases):
+    for test_case in error_test_cases:
         exception, except_fn = get_error_details(test_case)
 
         pubnonces = [pnonce[i] for i in test_case["nonce_indices"]]

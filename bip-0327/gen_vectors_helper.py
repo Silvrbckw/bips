@@ -8,7 +8,7 @@ def gen_key_agg_vectors():
     aggpoint, _, _ = keygen_ctx
     aggsk = key_agg_coeff([pk], pk)*int_from_bytes(sk) % n
     t = n - aggsk
-    assert point_add(point_mul(G, t), aggpoint) == None
+    assert point_add(point_mul(G, t), aggpoint) is None
     is_xonly = False
     tweak = bytes_from_int(t)
     assert_raises(ValueError, lambda: apply_tweak(keygen_ctx, tweak, is_xonly), lambda e: True)
@@ -37,11 +37,11 @@ def check_sign_verify_vectors():
         (Q, _, _, _, R, _) = get_session_values(session_ctx)
         # Make sure the vectors include tests for both variants of Q and R
         if i == 0:
-           assert has_even_y(Q) and not has_even_y(R)
-        if i == 1:
-           assert not has_even_y(Q) and has_even_y(R)
-        if i == 2:
-           assert has_even_y(Q) and has_even_y(R)
+            assert has_even_y(Q) and not has_even_y(R)
+        elif i == 1:
+            assert not has_even_y(Q) and has_even_y(R)
+        elif i == 2:
+            assert has_even_y(Q) and has_even_y(R)
 
 def check_tweak_vectors():
     with open(os.path.join(sys.path[0], 'vectors', 'tweak_vectors.json')) as f:
@@ -60,9 +60,9 @@ def check_tweak_vectors():
         _, gacc, _ = key_agg_and_tweak(pubkeys, tweaks, is_xonly)
         # Make sure the vectors include tests for gacc = 1 and -1
         if i == 0:
-           assert gacc == n - 1
-        if i == 1:
-           assert gacc == 1
+            assert gacc == n - 1
+        elif i == 1:
+            assert gacc == 1
 
 def sig_agg_vectors():
     print("sig_agg_vectors.json:")
