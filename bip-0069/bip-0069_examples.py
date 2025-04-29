@@ -8,7 +8,7 @@ def bytearr_cmp(barr1, barr2):
 			return -1;
 		elif (barr1[pos] > barr2[pos]):
 			return 1;
-		pos = pos + 1
+		pos += 1
 	#the shorter array will be ordered first
 	if (len(barr1) < len(barr2)):
 		return -1

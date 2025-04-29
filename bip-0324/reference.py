@@ -151,16 +151,12 @@ class FE:
         equivalent to x = a^((1 + (p-1)/2)/2) (mod p), or x = a^((p+1)/4) (mod p)."""
         v = int(self)
         s = pow(v, (FE.SIZE + 1) // 4, FE.SIZE)
-        if s**2 % FE.SIZE == v:
-            return FE(s)
-        return None
+        return FE(s) if s**2 % FE.SIZE == v else None
 
     def sqrts(self):
         """Compute all square roots of a field element, if any."""
         s = self.sqrt()
-        if s is None:
-            return []
-        return [FE(s), -FE(s)]
+        return [] if s is None else [FE(s), -FE(s)]
 
     # The cube roots of 1 (mod p).
     CBRT1 = [
@@ -186,9 +182,7 @@ class FE:
         v = int(self)
         c = pow(v, (FE.SIZE + 2) // 9, FE.SIZE)
 
-        if pow(c, 3, FE.SIZE) == v:
-            return [FE(c * f) for f in FE.CBRT1]
-        return []
+        return [FE(c * f) for f in FE.CBRT1] if pow(c, 3, FE.SIZE) == v else []
 
     def is_square(self):
         """Determine if this field element has a square root."""
@@ -223,9 +217,7 @@ class FE:
     def from_bytes(b):
         """Convert a 32-byte big endian encoding of a field element to an FE."""
         v = int.from_bytes(b, 'big')
-        if v >= FE.SIZE:
-            return None
-        return FE(v)
+        return None if v >= FE.SIZE else FE(v)
 
     def __str__(self):
         """Convert this field element to a string."""
@@ -271,11 +263,7 @@ class GE:
             x3 = l**2 - self.x - a.x
             y3 = l * (self.x - x3) - self.y
             return GE(x3, y3)
-        if self.y == a.y:
-            # Adding point to itself
-            return self.double()
-        # Adding point to its negation
-        return None
+        return self.double() if self.y == a.y else None
 
     def __radd__(self, a):
         """Add infinity to a point."""
@@ -300,9 +288,7 @@ class GE:
     def lift_x(x):
         """Take an FE, and return the point with that as X coordinate, and square Y."""
         y = (FE(x)**3 + 7).sqrt()
-        if y is None:
-            return None
-        return GE(x, y)
+        return None if y is None else GE(x, y)
 
     @staticmethod
     def is_valid_x(x):
@@ -332,7 +318,7 @@ def xswiftec(u, t):
         u = FE(1)
     if t == 0:
         t = FE(1)
-    if u**3 + t**2 + 7 == 0:
+    if u**3 + t**2 == -7:
         t = 2 * t
     X = (u**3 + 7 - t**2) / (2 * t)
     Y = (X + t) / (MINUS_3_SQRT * u)
@@ -568,7 +554,7 @@ class FSChaCha20:
     def crypt(self, chunk):
         """Encrypt or decypt chunk."""
         ks = self.get_keystream_bytes(len(chunk))
-        ret = bytes([ks[i] ^ chunk[i] for i in range(len(chunk))])
+        ret = bytes(ks[i] ^ chunk[i] for i in range(len(chunk)))
         if ((self.chunk_counter + 1) % REKEY_INTERVAL) == 0:
             self.key = self.get_keystream_bytes(32)
             self.block_counter = 0
@@ -605,13 +591,23 @@ NETWORK_MAGIC = b'\xf9\xbe\xb4\xd9'
 def initialize_v2_transport(ecdh_secret, initiating):
     """Return a peer object with various BIP324 derived keys and ciphers."""
 
-    peer = {}
     salt = b'bitcoin_v2_shared_secret' + NETWORK_MAGIC
-    for name, length in (
-        ('initiator_L', 32), ('initiator_P', 32), ('responder_L', 32), ('responder_P', 32),
-        ('garbage_terminators', 32), ('session_id', 32)):
-        peer[name] = hkdf_sha256(
-            salt=salt, ikm=ecdh_secret, info=name.encode('utf-8'), length=length)
+    peer = {
+        name: hkdf_sha256(
+            salt=salt,
+            ikm=ecdh_secret,
+            info=name.encode('utf-8'),
+            length=length,
+        )
+        for name, length in (
+            ('initiator_L', 32),
+            ('initiator_P', 32),
+            ('responder_L', 32),
+            ('responder_P', 32),
+            ('garbage_terminators', 32),
+            ('session_id', 32),
+        )
+    }
     peer['initiator_garbage_terminator'] = peer['garbage_terminators'][:16]
     peer['responder_garbage_terminator'] = peer['garbage_terminators'][16:]
     del peer['garbage_terminators']
